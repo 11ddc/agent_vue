@@ -1,51 +1,31 @@
 <script setup>
 import ChatPanel from '@/components/ChatPanel.vue'
-import KnowledgePanel from '@/components/KnowledgePanel.vue'
+import ConversationHeader from '@/components/ConversationHeader.vue'
 </script>
 
 <template>
   <!--
-    一屏两栏：左边聊天，右边知识库上传。
-    两栏都是 flex 列 + min-height:0，让内部的消息区/列表区自己滚，
-    整页不出现滚动条 —— 聊天界面里页面级滚动会把输入框顶出视口。
+    对话列。
+    重构前这里是「一屏两栏：左聊天 + 右 360px 知识库」，整页 max-width 1440px，
+    聊天正文一行能拉到 800px 以上 —— 中文超过约 40 字就难扫读。
+    现在对话是唯一主角，列宽锁在 --column-max，知识库收进抽屉（见 KnowledgeDrawer）。
   -->
-  <main class="workbench">
-    <ChatPanel class="col-chat" />
-    <KnowledgePanel class="col-kb" />
-  </main>
+  <div class="column">
+    <ConversationHeader />
+    <ChatPanel />
+  </div>
 </template>
 
 <style scoped>
-.workbench {
-  height: calc(100vh - 64px); /* 64px = AppHeader 的高度 */
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 18px 20px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
-}
-
-.col-chat,
-.col-kb {
+.column {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--column-max);
+  height: 100%;
   min-height: 0;
-  min-width: 0;
-}
-
-@media (max-width: 1080px) {
-  .workbench {
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 14px;
-    padding: 14px;
-  }
-}
-
-/* 窄屏改为上下堆叠，各自给固定高度，仍然不产生整页滚动 */
-@media (max-width: 860px) {
-  .workbench {
-    height: auto;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(480px, 62vh) minmax(380px, auto);
-  }
+  margin: 0 auto;
+  border-inline: 1px solid var(--border);
+  background: var(--bg-app);
 }
 </style>

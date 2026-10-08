@@ -2,11 +2,17 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { streamChat, sendChat } from '@/api/chat.js'
 import { describeError } from '@/api/client.js'
+import { readSessionString, removeSession, writeSession } from '@/utils/storage.js'
+import { DEFAULT_ROLE_ID, getRole } from '@/config/roles.js'
 
 const SESSION_KEY = 'chat_session_id'
 
-const WELCOME =
-  '您好！我是智能客服小优 👋\n\n我可以帮您查产品参数、排查设备故障、了解安装与售后政策。也可以直接上传文档到右侧知识库，我会基于新上传的资料回答。'
+/*
+ * 开场白来自角色预设，不再硬编码在这里。
+ * 这个应用已经从"只能客服"改成通用对话产品，客服只是其中一个可选角色
+ * （见 src/config/roles.js）；切换角色时调用方会把新角色的欢迎语传进来。
+ */
+const DEFAULT_WELCOME = getRole(DEFAULT_ROLE_ID).welcome
 
 let msgSeq = 0
 function nextId() {
@@ -26,14 +32,15 @@ function makeMessage(role, content, extra = {}) {
 
 export const useChatStore = defineStore('chat', () => {
   // ===== 状态 =====
-  const messages = ref([makeMessage('assistant', WELCOME)])
+  const messages = ref([makeMessage('assistant', DEFAULT_WELCOME)])
   const inputText = ref('')
   const isSending = ref(false)
   /** 流式过程中的阶段提示（后端 status 事件推来的文案） */
   const statusText = ref('')
   /** 上一次回答的交付方式，用于界面标注：stream / sync */
   const lastMode = ref('')
-  const sessionId = ref(sessionStorage.getItem(SESSION_KEY) || '')
+  // 走安全包装：隐私模式下裸调 sessionStorage 会抛异常，直接把应用搞白屏
+  const sessionId = ref(readSessionString(SESSION_KEY))
 
   // 打断当前请求用；每次 send 重新建一个
   let controller = null
@@ -42,34 +49,32 @@ export const useChatStore = defineStore('chat', () => {
   const canSend = computed(() => !!inputText.value.trim() && !isSending.value)
   const hasSession = computed(() => !!sessionId.value)
 
-  // 快捷问题：贴着后端知识库的真实语料（云枢 S3 系列 / 上门安装 / 售后）
-  const quickQuestions = [
-    '云枢S3 Pro 支持哪些连接协议？',
-    '音箱连不上 WiFi 怎么排查？',
-    '上门安装服务包含哪些内容？',
-    '设备保修期多久，怎么申请维修？',
-  ]
+  // 引导问句已经移到角色预设（src/config/roles.js），不同角色给不同的问句。
+  // 客服/文档角色那 4 条是逐条核对过知识库出处的，出处注释也一起搬过去了。
 
   // ===== 会话管理 =====
 
   function setSession(id) {
     if (!id || id === sessionId.value) return
     sessionId.value = id
-    sessionStorage.setItem(SESSION_KEY, id)
+    writeSession(SESSION_KEY, id)
   }
 
   /**
    * 开启新会话。
    *
+   * @param {string} [welcome] 开场白。切换角色时必须传新角色的欢迎语，
+   *   否则会出现"切到客服了，开场白还是通用助手"的错位。
+   *
    * 注意：后端的历史（query_rewrite 读取的会话记录）是**按 session_id 存在 Redis 里**的，
    * 前端这里换一个 id 就等于让后端换一段上下文——这就是"新会话"的全部含义，
    * 前端不需要也没法主动去删后端的历史。
    */
-  function reset() {
+  function reset(welcome = DEFAULT_WELCOME) {
     stop()
     sessionId.value = ''
-    sessionStorage.removeItem(SESSION_KEY)
-    messages.value = [makeMessage('assistant', WELCOME)]
+    removeSession(SESSION_KEY)
+    messages.value = [makeMessage('assistant', welcome)]
     statusText.value = ''
     lastMode.value = ''
     inputText.value = ''
@@ -187,8 +192,7 @@ export const useChatStore = defineStore('chat', () => {
         reply.error = ''
       } catch (err2) {
         reply.content =
-          reply.content ||
-          '抱歉，我暂时无法回答这个问题。请稍后重试，或拨打客服热线 400-888-6666。'
+          reply.content || '抱歉，我暂时无法回答这个问题。请稍后重试，或拨打客服热线 400-888-6666。'
         reply.error = describeError(err2, '请求失败')
         reply.mode = 'failed'
       }
@@ -205,10 +209,6 @@ export const useChatStore = defineStore('chat', () => {
     controller = null
   }
 
-  function sendQuickQuestion(question) {
-    return send(question)
-  }
-
   return {
     messages,
     inputText,
@@ -218,9 +218,7 @@ export const useChatStore = defineStore('chat', () => {
     sessionId,
     canSend,
     hasSession,
-    quickQuestions,
     send,
-    sendQuickQuestion,
     stop,
     reset,
     setSession,

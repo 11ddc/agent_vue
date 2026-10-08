@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { useKnowledgeStore } from '@/stores/knowledge.js'
 import { ACCEPT_ATTR, ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, formatBytes } from '@/api/knowledge.js'
 
@@ -65,24 +66,21 @@ function statusText(item) {
   }
 }
 
+// emoji 换成矢量图标：跨平台渲染一致、能跟随主题色，也不会像 📄/⚙️ 那样字形大小不一
 const STATUS_ICON = {
-  uploading: '⬆️',
-  indexing: '⚙️',
-  done: '✅',
-  error: '⚠️',
-  canceled: '⏹️',
+  uploading: 'loader',
+  indexing: 'loader',
+  done: 'checkCircle',
+  error: 'alertTriangle',
+  canceled: 'xCircle',
 }
+
+// 这两个状态是"进行中"，图标要转起来
+const SPINNING = new Set(['uploading', 'indexing'])
 </script>
 
 <template>
-  <aside class="kb-panel">
-    <header class="kb-head">
-      <div>
-        <h2 class="kb-title">📚 知识库</h2>
-        <p class="kb-sub">上传的文档会被解析、切块、向量化后立即参与回答</p>
-      </div>
-    </header>
-
+  <div class="kb-panel">
     <!-- 上传区 -->
     <div
       class="dropzone"
@@ -93,7 +91,14 @@ const STATUS_ICON = {
       @dragleave.prevent="dragging = false"
       @drop.prevent="onDrop"
     >
-      <div class="drop-icon">{{ kb.isBusy ? '⏳' : '📄' }}</div>
+      <span class="drop-icon" aria-hidden="true">
+        <AppIcon
+          :name="kb.isBusy ? 'loader' : 'uploadCloud'"
+          :size="24"
+          :stroke-width="1.6"
+          :class="{ 'icon-spin': kb.isBusy }"
+        />
+      </span>
       <p class="drop-main">
         {{ kb.isBusy ? '正在处理，请稍候…' : '点击选择文件，或把文件拖到这里' }}
       </p>
@@ -109,6 +114,7 @@ const STATUS_ICON = {
         type="file"
         :accept="ACCEPT_ATTR"
         multiple
+        aria-label="选择要上传的文档"
         @change="onPicked"
       />
     </div>
@@ -127,7 +133,13 @@ const STATUS_ICON = {
 
       <div v-for="item in kb.items" :key="item.id" class="kb-item" :class="item.status">
         <div class="item-row">
-          <span class="item-icon">{{ STATUS_ICON[item.status] || '📄' }}</span>
+          <span class="item-icon" :class="`st-${item.status}`" aria-hidden="true">
+            <AppIcon
+              :name="STATUS_ICON[item.status] || 'fileText'"
+              :size="15"
+              :class="{ 'icon-spin': SPINNING.has(item.status) }"
+            />
+          </span>
           <div class="item-main">
             <div class="item-name" :title="item.name">{{ item.name }}</div>
             <div class="item-sub">
@@ -136,10 +148,16 @@ const STATUS_ICON = {
               <span :class="`st-${item.status}`">{{ statusText(item) }}</span>
             </div>
           </div>
-          <button class="item-remove" title="从列表移除" @click="kb.remove(item.id)">×</button>
+          <button
+            class="item-remove"
+            :aria-label="`从列表移除 ${item.name}`"
+            @click="kb.remove(item.id)"
+          >
+            <AppIcon name="x" :size="14" />
+          </button>
         </div>
 
-        <!-- 进度条：上传阶段是真进度，索引阶段无法拿到进度，用流动条纹表示"在做" -->
+        <!-- 进度条：上传阶段是真进度，索引阶段拿不到进度，用流动条纹表示"在做" -->
         <div v-if="item.status === 'uploading'" class="bar">
           <div class="bar-fill" :style="{ width: `${item.percent}%` }"></div>
         </div>
@@ -154,63 +172,45 @@ const STATUS_ICON = {
     </div>
 
     <footer class="kb-foot">
-      <p>上传成功后即可在左侧直接提问，例如「云枢S3 Pro 的功耗是多少？」</p>
+      <!--
+        原来写的是"上传成功后即可在左侧直接提问"，但 <860px 时知识库会被堆到聊天下方，
+        文案和布局自相矛盾。现在知识库是抽屉，指向"关掉面板"才是永远成立的说法。
+      -->
+      <p>上传成功后关掉这个面板直接提问即可，例如「云枢 S3 Pro 的功耗是多少？」</p>
     </footer>
-  </aside>
+  </div>
 </template>
 
 <style scoped>
 .kb-panel {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
-  background: #fff;
-  border-radius: var(--radius-xl);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-}
-
-/* ===== 头部 ===== */
-.kb-head {
-  padding: 16px 18px 12px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.kb-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.kb-sub {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  line-height: 1.5;
 }
 
 /* ===== 上传区 ===== */
 .dropzone {
-  margin: 14px;
-  padding: 20px 16px;
-  border: 1.5px dashed #dfe3e8;
+  margin: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-lg);
-  background: #fafbfc;
+  background: var(--bg-app);
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    border-color var(--duration) var(--ease),
+    background var(--duration) var(--ease);
 }
 
 .dropzone:hover {
-  border-color: var(--color-primary);
-  background: #fff8f4;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .dropzone.dragging {
-  border-color: var(--color-primary);
-  background: #fff2ea;
-  transform: scale(1.01);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .dropzone.busy {
@@ -219,40 +219,40 @@ const STATUS_ICON = {
 }
 
 .drop-icon {
-  font-size: 28px;
+  display: flex;
+  justify-content: center;
+  color: var(--text-muted);
 }
 
 .drop-main {
-  margin: 8px 0 4px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .drop-hint {
-  margin: 0 0 14px;
-  font-size: 11px;
-  color: #a8b0bb;
-  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
 }
 
 .btn-upload {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 20px;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 13px;
+  padding: 8px var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--action-bg);
+  color: var(--on-action);
+  font-size: var(--text-sm);
   font-weight: 500;
-  transition: background 0.2s;
+  transition: background var(--duration-fast) var(--ease);
 }
 
 .btn-upload:hover:not(:disabled) {
-  background: var(--color-primary-dark);
+  background: var(--action-bg-hover);
 }
 
 .btn-upload:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .hidden-input {
@@ -264,22 +264,20 @@ const STATUS_ICON = {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 18px 8px;
-  font-size: 12px;
-  color: var(--color-text-muted);
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .list-actions {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .link-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 12px;
-  color: var(--color-primary);
+  color: var(--accent-text);
+  font-size: var(--text-xs);
 }
 
 .link-btn:hover {
@@ -290,45 +288,45 @@ const STATUS_ICON = {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 14px 8px;
+  padding: 0 var(--space-4) var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .empty {
-  padding: 16px 4px;
-  font-size: 12px;
-  color: #b6bcc6;
+  padding: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
   text-align: center;
 }
 
 .kb-item {
-  padding: 10px 12px;
-  border: 1px solid #eef0f3;
-  border-radius: var(--radius-base);
-  background: #fff;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
 .kb-item.done {
-  border-color: #d9f0e1;
-  background: #f7fdf9;
+  border-color: var(--success-bg);
+  background: var(--success-bg);
 }
 
 .kb-item.error {
-  border-color: #fadcdc;
-  background: #fff8f8;
+  border-color: var(--danger-bg);
+  background: var(--danger-bg);
 }
 
 .item-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .item-icon {
-  font-size: 14px;
   line-height: 1.4;
+  color: var(--text-muted);
 }
 
 .item-main {
@@ -337,8 +335,7 @@ const STATUS_ICON = {
 }
 
 .item-name {
-  font-size: 13px;
-  color: var(--color-text);
+  font-size: var(--text-sm);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -346,11 +343,11 @@ const STATUS_ICON = {
 }
 
 .item-sub {
-  margin-top: 2px;
-  font-size: 11px;
-  color: #9aa2ad;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .sep {
@@ -358,51 +355,59 @@ const STATUS_ICON = {
 }
 
 .st-done {
-  color: #1f9254;
+  color: var(--success);
 }
+
 .st-error {
-  color: #d64545;
+  color: var(--danger);
 }
-.st-indexing {
-  color: #b87503;
+
+.st-indexing,
+.st-uploading {
+  color: var(--warning);
+}
+
+.st-canceled {
+  color: var(--text-muted);
 }
 
 .item-remove {
-  border: none;
-  background: none;
-  color: #c8ccd3;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 
 .item-remove:hover {
-  color: #d64545;
+  background: var(--bg-hover);
+  color: var(--danger);
 }
 
 .bar {
-  margin-top: 8px;
   height: 4px;
-  border-radius: 2px;
-  background: #eef0f3;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-active);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  background: var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
   transition: width 0.25s ease;
 }
 
 /* 索引阶段拿不到真实进度，用流动条纹表示"正在做"而不是"卡住了" */
 .bar-fill.indeterminate {
   width: 40%;
-  background: repeating-linear-gradient(
-    115deg,
-    #f7931e 0 8px,
-    #ffc891 8px 16px
-  );
+  background: repeating-linear-gradient(115deg, var(--accent) 0 8px, var(--accent-300) 8px 16px);
   animation: slide 1.1s linear infinite;
 }
 
@@ -416,26 +421,26 @@ const STATUS_ICON = {
 }
 
 .item-msg {
-  margin: 7px 0 0;
-  font-size: 11px;
-  color: #8b93a1;
-  line-height: 1.5;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
 }
 
 .item-msg.bad {
-  color: #d64545;
+  color: var(--danger);
 }
 
 /* ===== 页脚 ===== */
 .kb-foot {
-  padding: 10px 18px 14px;
-  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border);
 }
 
 .kb-foot p {
-  margin: 0;
-  font-size: 11px;
-  color: #a8b0bb;
-  line-height: 1.5;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
 }
 </style>

@@ -1,19 +1,250 @@
-/* 全局 CSS 变量与基础样式 */
+/*
+ * 全局设计系统。
+ *
+ * 为什么要把颜色/字号/间距全部收敛成变量：
+ * 重构前三个组件里散着 81 处硬编码十六进制色值，同一屏出现
+ * #ff6b35 / #f7931e / #e74c3c / #ffc891 四种没有关系的橙红，
+ * 而且 AppHeader 用的 #e74c3c 和 main.css 里的 --color-primary 根本不是同一个色。
+ * 人眼不会说"色号不对"，只会说"脏"。所有颜色现在只有一个来源。
+ *
+ * 关于深色模式的三层优先级（自上而下）：
+ *   1. <html data-theme="light|dark">  —— 用户在界面上显式选择过
+ *   2. @media (prefers-color-scheme: dark) 且没有显式选择 —— 跟随系统
+ *   3. :root 里的浅色默认值
+ * 用 :not([data-theme='light']) 把第 2 层挡住，否则"显式选浅色"会被系统深色盖掉。
+ */
+
 :root {
-  --color-primary: #ff6b35;
-  --color-primary-dark: #e55a2b;
-  --color-danger: #ff4d4f;
-  --color-text: #333;
-  --color-text-secondary: #666;
-  --color-text-muted: #999;
-  --color-border: #e8e8e8;
-  --color-bg: #f5f5f5;
-  --radius-base: 8px;
+  color-scheme: light dark;
+
+  /* ===== 中性色阶 ===== */
+  --neutral-0: #ffffff;
+  --neutral-25: #fcfcfd;
+  --neutral-50: #f8f8f9;
+  --neutral-100: #f1f1f3;
+  --neutral-200: #e4e4e7;
+  --neutral-300: #d1d1d6;
+  --neutral-400: #a1a1aa;
+  --neutral-500: #71717a;
+  --neutral-600: #52525b;
+  --neutral-700: #3f3f46;
+  --neutral-800: #27272a;
+  --neutral-900: #18181b;
+  --neutral-950: #0f0f11;
+
+  /*
+   * ===== 品牌色阶（暖陶土）=====
+   * 从原来的 #ff6b35 收敛而来：降低饱和度、拉开明度，
+   * 500 只做装饰，需要承载文字时一律用 600/700（见下面的 --accent-text）。
+   */
+  --accent-50: #fff5f2;
+  --accent-100: #ffe8e1;
+  --accent-200: #ffd0c2;
+  --accent-300: #ffb29c;
+  --accent-400: #f98e72;
+  --accent-500: #e8703a;
+  --accent-600: #ce5a28;
+  --accent-700: #a94519;
+  --accent-800: #833515;
+  --accent-900: #5f2711;
+
+  /* ===== 语义色（浅底上都过了 WCAG AA 4.5:1）===== */
+  --success: #15803d;
+  --success-bg: #eaf7ee;
+  --warning: #b45309;
+  --warning-bg: #fdf3e3;
+  --danger: #b91c1c;
+  --danger-bg: #fdeceb;
+
+  /* ===== 语义角色：组件只引用这一层，不直接用色阶 ===== */
+  --bg-app: var(--neutral-50);
+  --bg-surface: var(--neutral-0);
+  --bg-subtle: var(--neutral-100);
+  --bg-hover: var(--neutral-100);
+  --bg-active: var(--neutral-200);
+  --bg-overlay: rgba(24, 24, 27, 0.42);
+
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+
+  /* 正文次级色 7.6:1、弱化色 4.9:1 —— 重构前用的 #a8b0bb 只有 2.2:1，是硬伤 */
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-muted: var(--neutral-500);
+  --text-inverse: var(--neutral-0);
+
+  --accent: var(--accent-600);
+  --accent-hover: var(--accent-700);
+  --accent-soft: var(--accent-50);
+  --accent-soft-border: var(--accent-200);
+  /* 作为文字用的品牌色：白底上 5.9:1，可以直接当链接色 */
+  --accent-text: var(--accent-700);
+  --on-accent: #ffffff;
+
+  /*
+   * 用户气泡单独一对 token。
+   * 不能直接用 --accent-600(#ce5a28)：白字压在上面只有 4.1:1，不到 AA 的 4.5:1。
+   * 700 是 5.9:1，够用；深色模式则反过来用浅珊瑚 + 深字（8.3:1）。
+   */
+  --bubble-user-bg: var(--accent-700);
+  --bubble-user-fg: #ffffff;
+
+  /* 主操作按钮走近黑，而不是品牌色 —— 既能拿到 17:1 的对比度，也让界面安静下来 */
+  --action-bg: var(--neutral-900);
+  --action-bg-hover: var(--neutral-700);
+  --on-action: var(--neutral-0);
+
+  --focus-ring: var(--accent-500);
+
+  /* ===== 排版 ===== */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* 六档字号；重构前用了 11/12/13/14/15/16/17/20/26/28 十档，中文 11px 基本是糊的 */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
+  --leading-tight: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+
+  /* ===== 间距（4px 基准）===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ===== 圆角 ===== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* ===== 阴影：只保留极轻的几档，卡片重阴影是"仪表盘感"的来源 ===== */
+  --shadow-xs: 0 1px 2px rgba(24, 24, 27, 0.06);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05), 0 1px 3px rgba(24, 24, 27, 0.07);
+  --shadow-md: 0 4px 12px rgba(24, 24, 27, 0.08);
+  --shadow-lg: 0 16px 40px rgba(24, 24, 27, 0.16);
+
+  /* ===== 布局 ===== */
+  --sidebar-width: 268px;
+  /* 对话正文列宽：中文单行超过约 40 字就难扫读，768 是舒适上限 */
+  --column-max: 768px;
+
+  --duration-fast: 120ms;
+  --duration: 180ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* 清除默认样式 */
+/* ===== 深色：用户显式选择 ===== */
+[data-theme='dark'] {
+  --bg-app: #0f0f11;
+  --bg-surface: #18181b;
+  --bg-subtle: #232327;
+  --bg-hover: #27272a;
+  --bg-active: #3f3f46;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  --border: #2b2b31;
+  --border-strong: #3f3f46;
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #8b8b94;
+  --text-inverse: #18181b;
+
+  --accent: #f98e72;
+  --accent-hover: #ffab95;
+  --accent-soft: #2a1a14;
+  --accent-soft-border: #4a2a1d;
+  --accent-text: #f98e72;
+  --on-accent: #1a0d07;
+
+  --bubble-user-bg: #f98e72;
+  --bubble-user-fg: #1a0d07;
+
+  /* 深色下反过来：近白按钮压在深底上 */
+  --action-bg: #f4f4f5;
+  --action-bg-hover: #d4d4d8;
+  --on-action: #18181b;
+
+  --focus-ring: #f98e72;
+
+  --success: #4ade80;
+  --success-bg: #122a1a;
+  --warning: #fbbf24;
+  --warning-bg: #2c2210;
+  --danger: #f87171;
+  --danger-bg: #2d1414;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* ===== 深色：没显式选择时跟随系统（显式选 light 时这一层被 :not 挡住）===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg-app: #0f0f11;
+    --bg-surface: #18181b;
+    --bg-subtle: #232327;
+    --bg-hover: #27272a;
+    --bg-active: #3f3f46;
+    --bg-overlay: rgba(0, 0, 0, 0.6);
+
+    --border: #2b2b31;
+    --border-strong: #3f3f46;
+
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #8b8b94;
+    --text-inverse: #18181b;
+
+    --accent: #f98e72;
+    --accent-hover: #ffab95;
+    --accent-soft: #2a1a14;
+    --accent-soft-border: #4a2a1d;
+    --accent-text: #f98e72;
+    --on-accent: #1a0d07;
+
+    --bubble-user-bg: #f98e72;
+    --bubble-user-fg: #1a0d07;
+
+    --action-bg: #f4f4f5;
+    --action-bg-hover: #d4d4d8;
+    --on-action: #18181b;
+
+    --focus-ring: #f98e72;
+
+    --success: #4ade80;
+    --success-bg: #122a1a;
+    --warning: #fbbf24;
+    --warning-bg: #2c2210;
+    --danger: #f87171;
+    --danger-bg: #2d1414;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -22,19 +253,27 @@
   padding: 0;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: var(--color-text);
-  background: var(--color-bg);
-  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-app);
+  /* 整页不滚动：滚动只发生在消息区/列表区内部 */
+  overflow: hidden;
 }
 
 a {
-  text-decoration: none;
   color: inherit;
+  text-decoration: none;
 }
 
 img {
@@ -44,27 +283,100 @@ img {
 
 button {
   font-family: inherit;
+  font-size: inherit;
   cursor: pointer;
+  color: inherit;
+  background: none;
+  border: none;
 }
 
-input {
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+textarea {
   font-family: inherit;
+  font-size: inherit;
+  color: inherit;
 }
 
-#app {
-  min-height: 100vh;
+/*
+ * 全局焦点环。重构前整个项目 focus-visible 出现 0 次，
+ * 键盘用户完全看不到焦点在哪。这里给一条兜底，组件不用逐个再写。
+ */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-/* 滚动条美化 */
+::selection {
+  background: var(--accent-200);
+  color: var(--neutral-900);
+}
+
+[data-theme='dark'] ::selection {
+  background: var(--accent-800);
+  color: var(--neutral-0);
+}
+
+/* ===== 滚动条 ===== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 3px;
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #aaa;
+  background: var(--neutral-400);
+  background-clip: content-box;
+}
+
+/* ===== 工具类 ===== */
+/* 只给读屏用的文本 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 动效降级。原来有 pulse / blink / bounce / slide 四个无限循环动画，
+ * 且没有任何 reduced-motion 处理 —— 对前庭敏感的用户是实打实的伤害。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

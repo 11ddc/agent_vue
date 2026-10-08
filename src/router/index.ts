@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 
-// 整个应用就是一个客服工作台：对话 + 知识库上传在同一屏，没有第二个页面。
-// 客服按钮/商品页等旧路由已随商城 demo 一并移除（见 components/ 下的清理记录）。
+// 整个应用目前只有一屏：对话为主，知识库是需要时展开的抽屉，没有第二个页面。
+// 外壳（侧边栏 + 知识库抽屉）放在 App.vue，以后加设置/历史记录页不用动 HomeView。
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
