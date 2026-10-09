@@ -141,7 +141,7 @@ async function onSubmit() {
           <AppIcon name="sparkles" :size="18" :stroke-width="2" />
         </span>
         <span class="brand-text">
-          <strong>AI 对话</strong>
+          <strong>AI 对话！</strong>
           <small>知识库增强</small>
         </span>
       </div>
