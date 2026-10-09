@@ -42,9 +42,16 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_FUND=false \
     NPM_CONFIG_AUDIT=false
 
-# 依赖单独一层：先只拷这两个文件再装依赖，这样只改 src/ 时这层命中缓存，
+# 依赖单独一层：先只拷这几个文件再装依赖，这样只改 src/ 时这层命中缓存，
 # 不会重装 node_modules（如果把 COPY . . 放在前面，这个效果就没了）。
-COPY package.json package-lock.json ./
+#
+# ⚠️ .npmrc **必须在这一层就拷进来**，不能指望下面的 `COPY . .`：
+#    它里面写着 legacy-peer-deps=true（package.json 里 eslint-plugin-oxlint 的
+#    peerDependencies 是 oxlint@~1.73.0，而 oxlint 锁的是 ~1.74.0，两者版本脱节；
+#    容器里的 npm 默认严格校验 peer，会直接 ERESOLVE 失败）。
+#    而 `npm ci` 就在紧随其后的 RUN 里执行 —— 那时 .npmrc 若还不在镜像里，
+#    这个设置等于没写（已踩过一次：.npmrc 提交了、也拉下来了，构建依然报 peer 冲突）。
+COPY package.json package-lock.json .npmrc ./
 
 # 用 npm ci 而不是 npm install —— 严格按 package-lock.json 装，避免服务器上装出与
 # 本地不同的依赖版本（"我本地是好的"最常见的来源）。
