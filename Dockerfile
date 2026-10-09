@@ -25,7 +25,7 @@
 # ⚠️ 不需要任何编译期环境变量：接口走同源相对路径 /api（src/api/client.js），
 #    由入口 nginx 反代过去，所以后端 compose 里那个 VITE_API_BASE 构建参数用不上。
 #
-# 需要 BuildKit：第 1 行的 syntax 指令、下面的 npm 缓存挂载和配置 heredoc 都依赖它，
+# 需要 BuildKit：下面 npm 依赖那层的缓存挂载（--mount=type=cache）依赖它，
 # docker compose v2 默认就是 BuildKit。
 
 # ── 阶段 1：构建静态产物 ─────────────────────────────────────────────
@@ -76,64 +76,26 @@ FROM nginx:1.30-alpine
 LABEL org.opencontainers.image.title="my-ai-chat-app" \
       org.opencontainers.image.description="智能客服工作台前端：Vite 构建产物 + 静态 nginx（监听 80，/api 由入口 nginx 反代）"
 
-# 内置站点配置。用 heredoc 直接写进镜像，好处是这份镜像自带全部运行所需的东西，
-# 不再读仓库里那份 deploy/nginx.conf（那份是旧单机部署用的"入口配置"，含 /api 反代，
-# 在新拓扑里由后端 compose 的 nginx 服务承担）。
-# ⚠️ 定界符 'CONF' 必须带引号：nginx 配置里全是 $uri / $host 这类变量，
-#    不加引号会被 Dockerfile 在构建期当成构建参数展开成空值，配置就废了。
-COPY <<'CONF' /etc/nginx/conf.d/default.conf
-# 前端静态站（容器内 80）。/api 不在这里，由入口 nginx 直接反代到 api:8000。
-server {
-    listen 80;
-    server_name _;
-    server_tokens off;
-
-    root /usr/share/nginx/html;
-    index index.html;
-
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
-
-    # 镜像自身的健康检查打这里（入口 nginx 的健康检查打它自己的 /healthz，不探本容器）
-    location = /healthz {
-        access_log off;
-        default_type text/plain;
-        return 200 "ok\n";
-    }
-
-    # Vite 产物文件名带内容 hash，可以放心长缓存
-    location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        try_files $uri =404;
-    }
-
-    # 入口 HTML 绝不缓存：缓存住的话发版后用户拿到的还是旧壳，
-    # 而旧壳引用的 chunk 已经被新构建删掉了 → 白屏
-    location = /index.html {
-        add_header Cache-Control "no-store";
-    }
-
-    location = /favicon.ico {
-        expires 7d;
-        access_log off;
-    }
-
-    # SPA 路由兜底：任何前端路由刷新都回 index.html
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-CONF
+# 内置站点配置：从 deploy/static-nginx.conf 用普通 COPY 打进镜像。
+#
+# ⚠️ 它以前是 `COPY <<'CONF' ... CONF` 内嵌在本文件里的。改成独立文件的原因很实际：
+#    heredoc 需要 Dockerfile 前端 >= 1.4，而第 1 行 `# syntax=docker/dockerfile:1` 会让
+#    BuildKit 去镜像仓库拉一份前端镜像 —— 如果拉到的是一份旧缓存（国内镜像源里很常见），
+#    heredoc 就退化成普通参数，构建报 `unknown instruction: server` 这种莫名其妙的错
+#    （而 --mount 只需要 1.2，所以它照常通过，更难判断）。
+#    普通 COPY 对前端版本没有任何要求，从根上消掉这个不确定性。
+#
+# 这份配置**不读**仓库里那份 deploy/nginx.conf —— 那份是旧单机部署的「入口配置」
+# （含 /api 反代），在新拓扑里由后端 compose 的 nginx 服务承担。
+COPY deploy/static-nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # 配置语法在构建阶段就校验：写错了这里直接失败，不会等到线上 nginx 起不来、
 # 在 restart: unless-stopped 下无限重启（那画面很难查）。
-# 前半句是防呆：万一 heredoc 的定界符哪天被改成不带引号的写法，$uri 会在构建期被
-# 展开成空串 —— 那种配置 nginx -t 未必报错，却会静默失效，所以直接断言变量还在。
+# 前半句是防呆：万一哪天有人把 static-nginx.conf 又拷回本文件里内嵌、
+# 而忘了给定界符加引号，$uri 会在构建期被展开成空串 —— 那种配置 nginx -t
+# 未必报错，却会静默失效，所以干脆断言变量还在。
 RUN grep -q 'try_files \$uri \$uri/ /index.html;' /etc/nginx/conf.d/default.conf \
     && nginx -t
 
