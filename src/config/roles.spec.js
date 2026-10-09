@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_ROLE_ID, ROLE_IDS, ROLES, getRole } from './roles.js'
+import { DEFAULT_ROLE_ID, ROLE_IDS, ROLES, getRole, resolveActiveRole } from './roles.js'
 
 describe('角色预设', () => {
   it('id 唯一', () => {
@@ -10,7 +10,29 @@ describe('角色预设', () => {
     expect(ROLE_IDS).toContain(DEFAULT_ROLE_ID)
   })
 
+  it('默认角色必须排在第一位，且是**可用**的', () => {
+    // 第一位 = 侧边栏第一个入口；available = 点下去真的能进。
+    // 两者缺一个，首屏就会变成一个"看着选中了、其实点不动"的角色
+    expect(ROLE_IDS[0]).toBe(DEFAULT_ROLE_ID)
+    expect(getRole(DEFAULT_ROLE_ID).available).toBe(true)
+  })
+
+  it('每个角色都显式声明 available', () => {
+    // 漏写一个字段就等于"悄悄多放开一个还没有后端能力的角色"，必须显式写
+    for (const role of ROLES) {
+      expect(typeof role.available, `${role.id}.available 必须是布尔值`).toBe('boolean')
+    }
+  })
+
+  it('当前只有文档问答可用：其余两个是占位入口', () => {
+    const available = ROLES.filter((role) => role.available).map((role) => role.id)
+    expect(available).toEqual(['docs'])
+    expect(getRole('general').available).toBe(false)
+    expect(getRole('service').available).toBe(false)
+  })
+
   it('每个角色的展示字段都齐全且非空', () => {
+    // 未开放的角色也要写全：将来把 available 打开时不用回头补文案
     for (const role of ROLES) {
       expect(role.id, '角色缺 id').toBeTruthy()
       for (const field of ['name', 'icon', 'tagline', 'welcome', 'placeholder']) {
@@ -41,15 +63,40 @@ describe('角色预设', () => {
     }
   })
 
-  it('未知 id 回落到第一个角色，而不是 undefined', () => {
-    expect(getRole('does-not-exist')).toBe(ROLES[0])
-    expect(getRole(null)).toBe(ROLES[0])
-    expect(getRole(undefined)).toBe(ROLES[0])
-    expect(getRole('')).toBe(ROLES[0])
+  it('未知 id 回落到默认角色，而不是 undefined', () => {
+    expect(getRole('does-not-exist')).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(getRole(null)).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(getRole(undefined)).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(getRole('')).toBe(getRole(DEFAULT_ROLE_ID))
   })
 
   it('getRole 能取回指定的角色', () => {
     expect(getRole('service').name).toBe('客服小优')
     expect(getRole('docs').id).toBe('docs')
+  })
+})
+
+describe('resolveActiveRole', () => {
+  it('可用的 id 原样返回', () => {
+    expect(resolveActiveRole('docs')).toBe(getRole('docs'))
+  })
+
+  it('未开放的角色回落到默认角色', () => {
+    // localStorage 里可能存着上一版选的"客服小优"：直接采用会让界面停在
+    // 一个点一下就提示"未开放"的角色上
+    expect(resolveActiveRole('service')).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(resolveActiveRole('general')).toBe(getRole(DEFAULT_ROLE_ID))
+  })
+
+  it('脏值回落到默认角色', () => {
+    expect(resolveActiveRole('被删掉的角色')).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(resolveActiveRole(null)).toBe(getRole(DEFAULT_ROLE_ID))
+    expect(resolveActiveRole(undefined)).toBe(getRole(DEFAULT_ROLE_ID))
+  })
+
+  it('任何输入的结果都是可用角色', () => {
+    for (const id of [...ROLE_IDS, '脏值', null, undefined, '']) {
+      expect(resolveActiveRole(id).available, `${String(id)} 回落到了未开放角色`).toBe(true)
+    }
   })
 })

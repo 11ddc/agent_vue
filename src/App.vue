@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
+import AppToast from '@/components/AppToast.vue'
 import KnowledgeDrawer from '@/components/KnowledgeDrawer.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
@@ -91,6 +92,12 @@ initTheme()
 
   <!-- 其余情况（主要是登录/注册页）：全屏，没有侧边栏 -->
   <RouterView v-else />
+
+  <!--
+    提示浮层放在最外层、不套任何分支：登录页也可能需要给反馈，
+    而它自己是 fixed 定位，不进 flex 布局、不会挤动上面的外壳。
+  -->
+  <AppToast />
 </template>
 
 <style scoped>

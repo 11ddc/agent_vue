@@ -23,6 +23,9 @@ export function useConversation() {
    * 必须重置会话而不只是换文案：后端的历史是按 session_id 存在 Redis 里的，
    * 不换 id 的话新角色的开场白会和旧角色的上下文混在一起。
    *
+   * 未开放的角色（见 config/roles.js 的 `available`）会被 store 拒绝，
+   * 这里直接返回 false，**不会**重置正在进行的对话。
+   *
    * @returns {boolean} 是否真的切换了
    */
   function switchRole(id) {

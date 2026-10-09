@@ -77,16 +77,22 @@ describe('应用外壳挂载', () => {
     if (messages) throw new Error(`挂载期间出现 console.error：\n${messages}`)
   })
 
-  it('默认渲染通用助手：三个角色、空状态引导问题、输入框都在', async () => {
+  it('默认渲染文档问答：三个角色入口都在，空状态引导问题、输入框也在', async () => {
     const wrapper = await mountApp()
 
+    // 三个入口都列着：未开放的两个是占位（点了会提示"功能未开放"），不做隐藏
     const names = roleButtons(wrapper).map((b) => b.text())
     expect(names.some((t) => t.includes('通用助手'))).toBe(true)
     expect(names.some((t) => t.includes('客服小优'))).toBe(true)
     expect(names.some((t) => t.includes('文档问答'))).toBe(true)
 
+    // 默认角色是文档问答：它是唯一 available 的角色，选中态必须在它身上
+    const active = roleButtons(wrapper).filter((b) => b.classes().includes('is-active'))
+    expect(active).toHaveLength(1)
+    expect(active[0].text()).toContain('文档问答')
+
     // 空状态：hero 标题 = 角色名，引导问题 4 条
-    expect(wrapper.find('.hero-title').text()).toBe('通用助手')
+    expect(wrapper.find('.hero-title').text()).toBe('文档问答')
     expect(wrapper.findAll('.suggestion')).toHaveLength(4)
 
     // 图标是自绘 SVG，不是 emoji
@@ -94,24 +100,65 @@ describe('应用外壳挂载', () => {
 
     const textarea = wrapper.find('textarea')
     expect(textarea.exists()).toBe(true)
-    expect(textarea.attributes('placeholder')).toContain('问点什么')
+    expect(textarea.attributes('placeholder')).toContain('就上传的资料提问')
   })
 
-  it('点击角色切换：开场白、占位文案一起换成新角色的', async () => {
+  it('点未开放的角色：弹一句"功能未开放"，且**不切角色、不重置会话**', async () => {
     const wrapper = await mountApp()
+    const { useChatStore } = await import('./stores/chat.js')
+    const chat = useChatStore()
+
+    // 先造一轮"正在进行"的对话，用来验证点按钮不会把它清掉
+    chat.messages.push({
+      id: 'u1',
+      role: 'user',
+      content: '正在进行的提问',
+      time: new Date().toISOString(),
+    })
+    chat.sessionId = 's-keep'
+    await wrapper.vm.$nextTick()
 
     const serviceButton = roleButtons(wrapper).find((b) => b.text().includes('客服小优'))
     expect(serviceButton).toBeTruthy()
+    // 语义上标了 disabled，但**没有**用原生 disabled：点了要给提示
+    expect(serviceButton.attributes('aria-disabled')).toBe('true')
+
     await serviceButton.trigger('click')
 
-    expect(wrapper.find('.hero-title').text()).toBe('客服小优')
-    expect(wrapper.find('.hero-welcome').text()).toContain('智能客服小优')
-    expect(wrapper.find('textarea').attributes('placeholder')).toContain('描述您遇到的问题')
+    const toast = wrapper.find('.toast')
+    expect(toast.exists()).toBe(true)
+    expect(toast.text()).toContain('客服小优')
+    expect(toast.text()).toContain('功能未开放')
 
-    // 选中态要跟着走，否则界面会同时"看起来选了通用助手"
-    const active = wrapper.findAll('.role').filter((b) => b.classes().includes('is-active'))
+    // 角色没换：头部名字、选中态、占位文案都还停在文档问答
+    expect(wrapper.find('.conv-head .name').text()).toBe('文档问答')
+    const active = roleButtons(wrapper).filter((b) => b.classes().includes('is-active'))
     expect(active).toHaveLength(1)
-    expect(active[0].text()).toContain('客服小优')
+    expect(active[0].text()).toContain('文档问答')
+    expect(wrapper.find('textarea').attributes('placeholder')).toContain('就上传的资料提问')
+
+    // 会话没被重置——这是最容易出的事故：点一下按钮，正在聊的内容全没了
+    expect(chat.sessionId).toBe('s-keep')
+    expect(chat.messages).toHaveLength(2)
+  })
+
+  it('未开放提示会自动消失（是个浮层，不需要用户手动关）', async () => {
+    // 必须用假定时器：真等 3 秒既拖慢测试，也测不出"到点就收"这条行为
+    vi.useFakeTimers()
+    try {
+      const wrapper = await mountApp()
+
+      const generalButton = roleButtons(wrapper).find((b) => b.text().includes('通用助手'))
+      await generalButton.trigger('click')
+      expect(wrapper.find('.toast').exists()).toBe(true)
+
+      vi.advanceTimersByTime(3000)
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('.toast').exists()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('知识库是抽屉：点开出现对话框，Esc 关闭', async () => {

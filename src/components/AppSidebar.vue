@@ -5,6 +5,7 @@ import { useConversation } from '@/composables/useConversation.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useKnowledgeStore } from '@/stores/knowledge.js'
 import { useThemeStore } from '@/stores/theme.js'
+import { useToastStore } from '@/stores/toast.js'
 import { useUiStore } from '@/stores/ui.js'
 
 /**
@@ -18,6 +19,7 @@ const { chat, roles, newSession, switchRole } = useConversation()
 const auth = useAuthStore()
 const kb = useKnowledgeStore()
 const theme = useThemeStore()
+const toast = useToastStore()
 const ui = useUiStore()
 
 const statusText = computed(() => {
@@ -28,9 +30,22 @@ const statusText = computed(() => {
 
 const sessionLabel = computed(() => (chat.sessionId ? `${chat.sessionId.slice(0, 8)}…` : ''))
 
-function onSelectRole(id) {
+/**
+ * 选角色。
+ *
+ * 未开放的角色（见 config/roles.js 的 `available`）点了只给一句提示：
+ * 三个角色的后端请求体**完全一样**，切换人设的能力还没有，划过去等于骗人。
+ * 同理也不能重置会话——那会把用户正在进行的对话清掉。
+ *
+ * @param {{ id: string, name: string, available: boolean }} role
+ */
+function onSelectRole(role) {
+  if (!role.available) {
+    toast.notify(`「${role.name}」功能未开放，敬请期待`)
+    return
+  }
   // 切换角色 = 换一段后端上下文（reset），已经在当前角色时 switchRole 返回 false 不做任何事
-  switchRole(id)
+  switchRole(role.id)
   ui.closeMobileNav()
 }
 
@@ -89,10 +104,14 @@ async function onLogout() {
         <li v-for="role in roles.list" :key="role.id">
           <button
             class="role"
-            :class="{ 'is-active': role.id === roles.currentId }"
+            :class="{
+              'is-active': role.id === roles.currentId,
+              'is-unavailable': !role.available,
+            }"
             :aria-current="role.id === roles.currentId ? 'true' : undefined"
-            :title="`${role.name} · ${role.tagline}`"
-            @click="onSelectRole(role.id)"
+            :aria-disabled="role.available ? undefined : 'true'"
+            :title="role.available ? `${role.name} · ${role.tagline}` : `${role.name} · 功能未开放`"
+            @click="onSelectRole(role)"
           >
             <span class="role-icon" aria-hidden="true">
               <AppIcon :name="role.icon" :size="17" />
@@ -310,6 +329,15 @@ async function onLogout() {
 
 .role.is-active {
   background: var(--accent-soft);
+}
+
+/*
+ * 未开放的角色：把名字压成次要色，让"哪个才是现在能用的"一眼可辨。
+ * 刻意**不**做置灰 disabled：它仍然可以点，点了会弹一句"功能未开放"，
+ * 比一个点不动的按钮更容易让用户明白发生了什么。
+ */
+.role.is-unavailable .role-name {
+  color: var(--text-muted);
 }
 
 .role-icon {
