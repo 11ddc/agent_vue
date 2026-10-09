@@ -1,8 +1,18 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
-  "exclude": ["src/**/__tests__/*"],
+  // 单测不进 app 程序：它们由 tsconfig.vitest.json 负责。
+  // 这一条是给下面的 allowJs 兜底的——原来只排除了 __tests__/ 目录，而本项目的用例
+  // 是 src/**/*.spec.js，开了 allowJs 会把它们一起拉进来（这正是上一版不开 allowJs 的理由）。
+  "exclude": ["src/**/__tests__/*", "src/**/*.spec.js"],
   "compilerOptions": {
+    // TS 要能 import JS 模块。tsconfig 默认 allowJs=false，于是 router/index.ts、
+    // main.ts 这类 TS 文件一 import stores/*.js 就报 TS7016（缺声明文件）。
+    // 打开它而不是给每个 JS 模块手写 .d.ts：后者要跟 store 的形状同步维护，迟早漂移。
+    // checkJs 仍为 false —— JS 照旧不做类型检查，只是能被 TS 解析与推断。
+    "allowJs": true,
+    "checkJs": false,
+
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
 

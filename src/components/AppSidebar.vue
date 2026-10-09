@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useConversation } from '@/composables/useConversation.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useKnowledgeStore } from '@/stores/knowledge.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useUiStore } from '@/stores/ui.js'
@@ -14,6 +15,7 @@ import { useUiStore } from '@/stores/ui.js'
  * 走 props 就得在 App.vue 里做一层纯粹的转发。
  */
 const { chat, roles, newSession, switchRole } = useConversation()
+const auth = useAuthStore()
 const kb = useKnowledgeStore()
 const theme = useThemeStore()
 const ui = useUiStore()
@@ -34,6 +36,18 @@ function onSelectRole(id) {
 
 function onNewSession() {
   newSession()
+  ui.closeMobileNav()
+}
+
+/**
+ * 登出。
+ *
+ * 这里**不**自己跳转：App.vue 盯着 auth.isAuthenticated，一旦由 true 变 false
+ * 就统一接管跳转（带上 redirect，登录后能回到原来那页）。会话在后台失效时走的是
+ * 同一条路径，所以跳转逻辑只有一份，不会出现"手动登出跳首页、被动失效跳别处"的分裂。
+ */
+async function onLogout() {
+  await auth.logout()
   ui.closeMobileNav()
 }
 </script>
@@ -114,7 +128,9 @@ function onNewSession() {
         <span class="label">主题：{{ theme.label }}</span>
       </button>
 
-      <a class="side-item" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">
+      <!-- 相对路径：开发环境由 Vite 代理、生产由 nginx 反代（见 deploy/nginx.conf）。
+           写死 127.0.0.1:8000 的话，部署到服务器后这个链接会指向**访客自己的电脑**。 -->
+      <a class="side-item" href="/docs" target="_blank" rel="noreferrer">
         <AppIcon name="externalLink" :size="17" />
         <span class="label">接口文档</span>
       </a>
@@ -122,6 +138,27 @@ function onNewSession() {
       <p v-if="sessionLabel" class="side-session tnum" :title="chat.sessionId">
         会话 {{ sessionLabel }}
       </p>
+
+      <!-- 当前身份与登出入口。理论上未登录走不到这个外壳（路由守卫生效），
+           v-if 只是让"万一"也不至于渲染出一个空名片的头像 -->
+      <div v-if="auth.isAuthenticated" class="side-user">
+        <span class="avatar" aria-hidden="true">{{ auth.initial }}</span>
+        <span class="user-text">
+          <span class="user-name" :title="auth.displayName">{{ auth.displayName }}</span>
+          <span class="user-role">{{ auth.roleText }}</span>
+        </span>
+      </div>
+
+      <button
+        v-if="auth.isAuthenticated"
+        class="side-item"
+        type="button"
+        :disabled="auth.busy"
+        @click="onLogout"
+      >
+        <AppIcon name="logOut" :size="17" />
+        <span class="label">{{ auth.busy ? '正在退出…' : '退出登录' }}</span>
+      </button>
 
       <p class="side-status" role="status" aria-live="polite">
         <span class="dot" :class="{ busy: chat.isSending || kb.isBusy }" aria-hidden="true"></span>
@@ -360,6 +397,49 @@ function onNewSession() {
   color: var(--text-muted);
 }
 
+/* ===== 当前身份 ===== */
+.side-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.user-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.user-name {
+  font-size: var(--text-sm);
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 .side-status {
   display: flex;
   align-items: center;
@@ -399,6 +479,7 @@ function onNewSession() {
 .sidebar.is-collapsed .section-label,
 .sidebar.is-collapsed .side-session,
 .sidebar.is-collapsed .side-status,
+.sidebar.is-collapsed .user-text,
 .sidebar.is-collapsed .count {
   display: none;
 }
@@ -411,6 +492,7 @@ function onNewSession() {
 
 .sidebar.is-collapsed .new-session,
 .sidebar.is-collapsed .role,
+.sidebar.is-collapsed .side-user,
 .sidebar.is-collapsed .side-item {
   justify-content: center;
   padding: var(--space-2);

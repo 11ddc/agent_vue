@@ -1,0 +1,53 @@
+# 前端编排：只干一件事 —— 把 nginx 容器接进后端 compose 的网络。
+#
+# ⚠️ 这个文件**不能**单独用 `docker compose up` 跑起来就完事：
+#    api 这个 upstream 必须在同一个网络里能解析到。所以顺序是
+#        1) 后端： cd my-agent-api && docker compose -p aichat up -d --build
+#        2) 前端： cd my-ai-chat-app/deploy && docker compose -p aichat-web up -d --build
+#    两条命令都写在 deploy/deploy.sh 里了，正常情况直接跑那个脚本。
+#
+# 后端用 -p aichat 固定了项目名，网络名才是确定的 aichat_default；
+# 不用 -p 的话项目名会取目录名（my-agent-api_default），换个目录 clone 就断了。
+
+services:
+  web:
+    build:
+      # 构建上下文是仓库根目录（Dockerfile 也在那儿），不是 deploy/
+      context: ..
+      dockerfile: Dockerfile
+    image: my-ai-chat-web:latest
+    container_name: ai-chat-web
+
+    # 公网只开这一个端口。HTTP 先跑通，要 HTTPS 见 DEPLOY.md 附录 B。
+    ports:
+      - "80:80"
+
+    networks:
+      - appnet
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # 日志别无限涨：单文件 10MB，留 3 个
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 可选：启用整站 Basic 认证时打开（先在 deploy/ 下生成 .htpasswd，
+    # 文件不存在时 Docker 会把它当目录创建，nginx 会因为读不到密码文件起不来）。
+    # volumes:
+    #   - ./.htpasswd:/etc/nginx/.htpasswd:ro
+
+networks:
+  appnet:
+    # 后端 compose 建的网络，名前缀就是上面 -p aichat 那个项目名
+    external: true
+    name: aichat_default

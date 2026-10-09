@@ -24,6 +24,16 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      // 接口文档（侧边栏「接口文档」指向 /docs）：生产环境由 nginx 反代
+      // （见 deploy/nginx.conf），这里补上是为了开发环境也能打开。
+      '/docs': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/openapi.json': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

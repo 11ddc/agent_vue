@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import { useAuthStore } from '@/stores/auth.js'
 import { useKnowledgeStore } from '@/stores/knowledge.js'
 import { ACCEPT_ATTR, ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, formatBytes } from '@/api/knowledge.js'
 
+const auth = useAuthStore()
 const kb = useKnowledgeStore()
 
 const fileInput = ref(null)
@@ -83,6 +85,7 @@ const SPINNING = new Set(['uploading', 'indexing'])
   <div class="kb-panel">
     <!-- 上传区 -->
     <div
+      v-if="auth.canManageKb"
       class="dropzone"
       :class="{ dragging, busy: kb.isBusy }"
       @click="pick"
@@ -119,8 +122,25 @@ const SPINNING = new Set(['uploading', 'indexing'])
       />
     </div>
 
+    <!--
+      权限不足时**换掉整个上传区**，而不是让它渲染出来再报 403。
+      后端 /api/upload 挂的是 require_roles("kb_admin")，普通 user 角色必然 403；
+      给一个"点了才知道不行"的入口比没有入口更糟。
+      注意这里只是隐藏入口，真正的边界仍是后端那道 403。
+    -->
+    <div v-else class="kb-gate" role="note">
+      <span class="gate-icon" aria-hidden="true">
+        <AppIcon name="lock" :size="22" :stroke-width="1.6" />
+      </span>
+      <p class="gate-title">没有上传知识库的权限</p>
+      <p class="gate-desc">
+        当前角色是<strong>{{ auth.roleText || '未登录' }}</strong
+        >。上传文档需要<strong>知识库管理员</strong>（kb_admin）或管理员权限，请联系管理员开通账号。
+      </p>
+    </div>
+
     <!-- 上传记录 -->
-    <div class="kb-list-head">
+    <div v-if="auth.canManageKb" class="kb-list-head">
       <span>本次会话上传（{{ kb.items.length }}）</span>
       <div class="list-actions">
         <button v-if="kb.isBusy" class="link-btn" @click="cancelAll">取消</button>
@@ -128,7 +148,7 @@ const SPINNING = new Set(['uploading', 'indexing'])
       </div>
     </div>
 
-    <div class="kb-list">
+    <div v-if="auth.canManageKb" class="kb-list">
       <p v-if="!kb.items.length" class="empty">还没有上传记录</p>
 
       <div v-for="item in kb.items" :key="item.id" class="kb-item" :class="item.status">
@@ -176,7 +196,10 @@ const SPINNING = new Set(['uploading', 'indexing'])
         原来写的是"上传成功后即可在左侧直接提问"，但 <860px 时知识库会被堆到聊天下方，
         文案和布局自相矛盾。现在知识库是抽屉，指向"关掉面板"才是永远成立的说法。
       -->
-      <p>上传成功后关掉这个面板直接提问即可，例如「云枢 S3 Pro 的功耗是多少？」</p>
+      <p v-if="auth.canManageKb">
+        上传成功后关掉这个面板直接提问即可，例如「云枢 S3 Pro 的功耗是多少？」
+      </p>
+      <p v-else>上传权限由管理员在后台开通，开通后刷新页面即可使用。</p>
     </footer>
   </div>
 </template>
@@ -187,6 +210,48 @@ const SPINNING = new Set(['uploading', 'indexing'])
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* ===== 权限不足的提示（替代整个上传区）===== */
+.kb-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-app);
+  text-align: center;
+}
+
+.gate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.gate-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gate-desc {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+}
+
+.gate-desc strong {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 /* ===== 上传区 ===== */

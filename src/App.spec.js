@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
 import HomeView from './views/HomeView.vue'
+import { useAuthStore } from './stores/auth.js'
 
 /**
  * 挂载冒烟测试。
@@ -14,9 +15,34 @@ import HomeView from './views/HomeView.vue'
  * 只有真正 mount 一次才会暴露。这个项目没有浏览器端到端测试，
  * 这个文件就是那道底线。
  */
-async function mountApp() {
+
+/**
+ * 造一个已登录的身份。
+ *
+ * 外壳现在按登录态分形态（见 App.vue 的 showShell）：只有已登录才渲染侧边栏。
+ * 这里直接摆好 auth store 的状态，而不是去 mock 网络 —— 本文件要测的是
+ * "外壳挂载后能不能正常跑"，登录流程本身由 stores/auth.spec.js 负责。
+ */
+function signIn() {
+  const auth = useAuthStore()
+  auth.user = {
+    user_id: 'u-test',
+    username: 'tester',
+    display_name: '测试账号',
+    role: 'admin',
+    tenant_id: 'default',
+    customer_id: null,
+  }
+  auth.status = 'authenticated'
+  return auth
+}
+
+async function mountApp({ authenticated = true, status } = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  if (authenticated) signIn()
+  else if (status) useAuthStore().status = status
+
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/', component: HomeView }],
@@ -112,6 +138,27 @@ describe('应用外壳挂载', () => {
 
     await wrapper.find('.rail-toggle').trigger('click')
     expect(wrapper.find('.sidebar').classes()).toContain('is-collapsed')
+  })
+
+  it('未登录/登录态未知时不套外壳（侧边栏不会露出来，点哪个都会 401）', async () => {
+    // ① 还没判定完（守卫在等刷新令牌）→ 给一句恢复提示，而不是先闪一下侧边栏
+    const boot = await mountApp({ authenticated: false })
+    expect(boot.find('.app-boot').exists()).toBe(true)
+    expect(boot.find('.sidebar').exists()).toBe(false)
+
+    // ② 明确判定为未登录 → 同样不套外壳，路由视图留给登录页
+    const anonymous = await mountApp({ authenticated: false, status: 'anonymous' })
+    expect(anonymous.find('.app-boot').exists()).toBe(false)
+    expect(anonymous.find('.sidebar').exists()).toBe(false)
+  })
+
+  it('已登录时侧边栏底部显示身份与登出入口', async () => {
+    const wrapper = await mountApp()
+
+    expect(wrapper.find('.side-user').text()).toContain('测试账号')
+    expect(wrapper.find('.side-user').text()).toContain('管理员')
+    const logout = wrapper.findAll('.side-item').find((b) => b.text().includes('退出登录'))
+    expect(logout).toBeTruthy()
   })
 
   it('主题按钮在 跟随系统 → 浅色 → 深色 之间循环，并写到 <html> 上', async () => {

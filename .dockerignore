@@ -1,0 +1,36 @@
+# 构建上下文排除项：只影响 docker build 时"发给 daemon 的目录"，
+# 不影响仓库内容。
+#
+# 为什么值得写：node_modules（几百 MB）、过期的 dist、21MB 的备份 zip
+# 都跟构建结果无关，传一遍纯浪费时间和磁盘。
+#
+# ⚠️ 注意 deploy/ **不能**排除：Dockerfile 要从上下文里取 deploy/nginx.conf。
+
+node_modules
+dist
+dist-ssr
+coverage
+
+.git
+.gitignore
+.gitattributes
+.vscode
+.scratch
+ui-preview
+tools
+_backup_before_chat_refactor.zip
+
+*.log
+.eslintcache
+*.tsbuildinfo
+
+# 密钥如果有的话（前端目前不需要 env，写在这里是防御性的）
+.env
+.env.*
+!.env.example
+
+# 文档与构建文件本身不需要进镜像
+DEPLOY.md
+PROJECT_DOCS.md
+Dockerfile
+.dockerignore

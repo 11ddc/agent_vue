@@ -1,4 +1,4 @@
-import api from './client.js'
+import api, { ensureAccessToken, refreshAccessToken } from './client.js'
 
 /**
  * 聊天接口封装。后端同时提供两条链路（见 my-agent-api/api/chat.py）：
@@ -7,6 +7,11 @@ import api from './client.js'
  *   POST /api/chat/stream  流式：SSE，事件类型 status / delta / reset / meta / done / error
  *
  * 两条走的是**同一张 LangGraph 编排图**，答案内容一致，差别只在交付方式。
+ *
+ * ## 鉴权（两条链路都要令牌）
+ * 后端两条链路都挂了 `Depends(require_user)`。同步那条走 axios 实例，令牌由
+ * client.js 的请求拦截器统一注入；**流式这条必须自己带头** —— 它用的是原生 `fetch`，
+ * 拦截器完全够不着。这是最容易漏的一处：axios 侧改好了，SSE 依旧 401。
  *
  * 关于 session_id：后端把它定义成 `str = Field(default_factory=uuid4)`，
  * 也就是"可以不给、但一旦给了就不能是 null"。所以没有会话时我们必须**省略这个键**，
@@ -104,15 +109,27 @@ export function createSSEParser(onEvent) {
  *          能不能安全地退回同步接口重跑（已经吐过就不能重跑，否则答案会重复两遍）。
  */
 export async function streamChat({ message, sessionId, signal, onEvent }) {
-  const res = await fetch(STREAM_PATH, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(buildBody(message, sessionId)),
-    signal,
-  })
+  const body = JSON.stringify(buildBody(message, sessionId))
+
+  // 最多两次：第一次用当前令牌，401 就刷新一次再试。
+  // 为什么不用 axios 的响应拦截器代劳：这条链路是原生 fetch，拦截器管不到，
+  // 所以要在这里把"取令牌 → 401 刷新 → 重试"这套逻辑自己走一遍。
+  let res
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = await ensureAccessToken()
+    res = await fetch(STREAM_PATH, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body,
+      signal,
+    })
+    if (res.status === 401 && attempt === 0 && (await refreshAccessToken())) continue
+    break
+  }
 
   if (!res.ok) {
     // 想拿到后端的 detail，但错误体可能是 JSON 也可能不是。

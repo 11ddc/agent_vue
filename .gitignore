@@ -42,8 +42,16 @@ __screenshots__/
 # 属于一次性的验收材料，不是应用源码；重跑脚本即可再生
 ui-preview/
 
+# 认证闭环的真实浏览器验收（_verify/auth-e2e.mjs 及其截图）
+# 同样是可再生的验收材料：脚本要连本地后端与管理员账号，不适合作为源码的一部分
+_verify/
+
 # 本地脚手架，以及与本 Vue 项目无关的影刀 RPA（ShadowBot / xbot）工作残留。
 # 这里刻意只列具体路径而不是整个 tools/，避免以后真需要 tools/ 时被静默忽略
 .scratch/
 fruit_flow.py
 tools/xb.ps1
+
+# 部署时的 HTTP Basic 密码文件（明文密码哈希，绝不进仓库）
+deploy/.htpasswd
+DEPLOY.md
